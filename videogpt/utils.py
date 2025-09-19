@@ -62,6 +62,68 @@ def tensor_slice(x, begin, size):
 import math
 import numpy as np
 import skvideo.io
+import torch
+
+
+def get_device(device_type=None):
+    """
+    Get the appropriate device for the current system.
+    
+    Args:
+        device_type (str, optional): Device type preference ('cuda', 'mps', 'cpu').
+                                   If None, auto-detects the best available device.
+    
+    Returns:
+        torch.device: The selected device
+    """
+    if device_type is not None:
+        if device_type.lower() == 'cuda' and torch.cuda.is_available():
+            return torch.device('cuda')
+        elif device_type.lower() == 'mps' and torch.backends.mps.is_available():
+            return torch.device('mps')
+        elif device_type.lower() == 'cpu':
+            return torch.device('cpu')
+        else:
+            print(f"Warning: Requested device '{device_type}' not available, falling back to auto-detection")
+    
+    # Auto-detect best available device
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    elif torch.backends.mps.is_available():
+        return torch.device('mps')
+    else:
+        return torch.device('cpu')
+
+
+def get_device_count():
+    """
+    Get the number of available devices for the current backend.
+    
+    Returns:
+        int: Number of available devices
+    """
+    if torch.cuda.is_available():
+        return torch.cuda.device_count()
+    elif torch.backends.mps.is_available():
+        return 1  # MPS typically supports only one device
+    else:
+        return 1  # CPU always has one device
+
+
+def is_distributed_available():
+    """
+    Check if distributed training is available for the current device type.
+    
+    Returns:
+        bool: True if distributed training is supported
+    """
+    if torch.cuda.is_available():
+        return torch.distributed.is_available()
+    else:
+        # MPS and CPU don't support distributed training in the same way
+        return False
+
+
 def save_video_grid(video, fname, nrow=None):
     b, c, t, h, w = video.shape
     video = video.permute(0, 2, 3, 4, 1)

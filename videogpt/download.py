@@ -6,6 +6,7 @@ import torch
 
 from .vqvae import VQVAE
 from .gpt import VideoGPT
+from .utils import get_device
 
 
 def download(id, fname, root=os.path.expanduser('~/.cache/videogpt')):
@@ -26,8 +27,13 @@ _VQVAE = {
     'kinetics_stride2x4x4': '1jvtjjtrtE4cy6pl7DK_zWFEPY3RZt2pB' # trained on 16 frames of 128 x 128 images
 }
 
-def load_vqvae(model_name, device=torch.device('cpu'), root=os.path.expanduser('~/.cache/videogpt')):
+def load_vqvae(model_name, device=None, root=os.path.expanduser('~/.cache/videogpt')):
     assert model_name in _VQVAE, f"Invalid model_name: {model_name}"
+    if device is None:
+        device = get_device()
+    elif isinstance(device, str):
+        device = get_device(device)
+    
     filepath = download(_VQVAE[model_name], model_name, root=root)
     vqvae = VQVAE.load_from_checkpoint(filepath).to(device)
     vqvae.eval()
@@ -40,8 +46,13 @@ _VIDEOGPT = {
     'ucf101_uncond_gpt': '1QkF_Sb2XVRgSbFT_SxQ6aZUeDFoliPQq', # unconditional, 16 frames of 128 x 128 images
 }
 
-def load_videogpt(model_name, device=torch.device('cpu')):
+def load_videogpt(model_name, device=None):
     assert model_name in _VIDEOGPT, f"Invalid model_name: {model_name}"
+    if device is None:
+        device = get_device()
+    elif isinstance(device, str):
+        device = get_device(device)
+    
     filepath = download(_VIDEOGPT[model_name], model_name)
     gpt = VideoGPT.load_from_checkpoint(filepath).to(device)
     gpt.eval()
@@ -51,8 +62,13 @@ def load_videogpt(model_name, device=torch.device('cpu')):
 
 _I3D_PRETRAINED_ID = '1mQK8KD8G6UWRa5t87SRMm5PVXtlpneJT'
 
-def load_i3d_pretrained(device=torch.device('cpu')):
+def load_i3d_pretrained(device=None):
     from .fvd.pytorch_i3d import InceptionI3d
+    if device is None:
+        device = get_device()
+    elif isinstance(device, str):
+        device = get_device(device)
+    
     i3d = InceptionI3d(400, in_channels=3).to(device)
     filepath = download(_I3D_PRETRAINED_ID, 'i3d_pretrained_400.pt')
     i3d.load_state_dict(torch.load(filepath, map_location=device))

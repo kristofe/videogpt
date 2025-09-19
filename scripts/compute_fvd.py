@@ -11,27 +11,50 @@ import torch.distributed as dist
 
 from videogpt.fvd.fvd import get_fvd_logits, frechet_distance
 from videogpt import VideoData, VideoGPT, load_videogpt
+from videogpt.utils import get_device, get_device_count, is_distributed_available
 
 
 MAX_BATCH = 32
 
 
 def main():
-    assert torch.cuda.is_available()
-    ngpus = torch.cuda.device_count()
-    assert 256 % ngpus == 0, f"Must have 256 % n_gpus == 0"
-
-    mp.spawn(main_worker, nprocs=ngpus, args=(ngpus, args), join=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ckpt', type=str, default='bair_gpt')
+    parser.add_argument('--n_trials', type=int, default=1, help="Number of trials to compute mean/std")
+    parser.add_argument('--port', type=int, default=23452)
+    parser.add_argument('--device', type=str, default=None,
+                        help='Device to use: cuda, mps, cpu, or auto (default: auto)')
+    args = parser.parse_args()
+    
+    # Get the appropriate device
+    device = get_device(args.device)
+    print(f"Using device: {device}")
+    
+    if device.type == 'cuda' and is_distributed_available():
+        ngpus = get_device_count()
+        assert 256 % ngpus == 0, f"Must have 256 % n_gpus == 0"
+        mp.spawn(main_worker, nprocs=ngpus, args=(ngpus, args), join=True)
+    else:
+        # For MPS and CPU, run single process
+        main_worker(0, 1, args)
 
 
 def main_worker(rank, size, args_in):
     global args
     args = args_in
     is_root = rank == 0
-    dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.port}',
-                            world_size=size, rank=rank)
-    device = torch.device(f"cuda:{rank}")
-    torch.cuda.set_device(device)
+    
+    # Get the appropriate device
+    device = get_device(args.device)
+    if device.type == 'cuda' and size > 1:
+        dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.port}',
+                                world_size=size, rank=rank)
+        device = torch.device(f"cuda:{rank}")
+        torch.cuda.set_device(device)
+    else:
+        # For MPS and CPU, or single GPU, use the detected device
+        device = device
+    
     torch.set_grad_enabled(False)
 
     n_trials = args.n_trials
@@ -44,7 +67,10 @@ def main_worker(rank, size, args_in):
     gpt.eval()
     args = gpt.hparams['args']
 
-    args.batch_size =  256 // dist.get_world_size()
+    if device.type == 'cuda' and size > 1:
+        args.batch_size = 256 // dist.get_world_size()
+    else:
+        args.batch_size = 256
     loader = VideoData(args).test_dataloader()
 
     #################### Load I3D ########################################
@@ -75,15 +101,23 @@ def main_worker(rank, size, args_in):
 
 
 def all_gather(tensor):
-    rank, size = dist.get_rank(), dist.get_world_size()
-    tensor_list = [torch.zeros_like(tensor) for _ in range(size)]
-    dist.all_gather(tensor_list, tensor)
-    return torch.cat(tensor_list)
+    if dist.is_initialized():
+        rank, size = dist.get_rank(), dist.get_world_size()
+        tensor_list = [torch.zeros_like(tensor) for _ in range(size)]
+        dist.all_gather(tensor_list, tensor)
+        return torch.cat(tensor_list)
+    else:
+        # For single process (MPS/CPU), just return the tensor
+        return tensor
 
 
 def eval_fvd(i3d, videogpt, loader, device):
-    rank, size = dist.get_rank(), dist.get_world_size()
-    is_root = rank == 0
+    if dist.is_initialized():
+        rank, size = dist.get_rank(), dist.get_world_size()
+        is_root = rank == 0
+    else:
+        rank, size = 0, 1
+        is_root = True
 
     batch = next(iter(loader))
     batch = {k: v.to(device) for k, v in batch.items()}
@@ -114,7 +148,8 @@ def eval_fvd(i3d, videogpt, loader, device):
     real_recon_embeddings = all_gather(real_recon_embeddings)
     real_embeddings = all_gather(real_embeddings)
 
-    assert fake_embeddings.shape[0] == real_recon_embeddings.shape[0] == real_embeddings.shape[0] == 256
+    expected_batch_size = 256 if size == 1 else 256 // size
+    assert fake_embeddings.shape[0] == real_recon_embeddings.shape[0] == real_embeddings.shape[0] == expected_batch_size
 
     fvd = frechet_distance(fake_embeddings.clone(), real_embeddings)
     fvd_star = frechet_distance(fake_embeddings.clone(), real_recon_embeddings)
@@ -122,10 +157,4 @@ def eval_fvd(i3d, videogpt, loader, device):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--ckpt', type=str, default='bair_gpt')
-    parser.add_argument('--n_trials', type=int, default=1, help="Number of trials to compute mean/std")
-    parser.add_argument('--port', type=int, default=23452)
-    args = parser.parse_args()
-
     main()
