@@ -166,6 +166,40 @@ class HDF5Dataset(data.Dataset):
         return dict(video=preprocess(video, self.resolution))
 
 
+class MovingMNISTDataset(data.Dataset):
+    """
+    Moving MNIST Dataset that integrates with VideoGPT.
+    This is a simplified wrapper around the full MovingMNISTDataset class.
+    """
+    
+    def __init__(self, data_file, sequence_length, train=True, resolution=64, **kwargs):
+        super().__init__()
+        self.train = train
+        self.sequence_length = sequence_length
+        self.resolution = resolution
+        
+        # Import here to avoid circular imports
+        from .moving_mnist import MovingMNISTDataset as FullMovingMNISTDataset
+        
+        # Create the full dataset
+        self.dataset = FullMovingMNISTDataset(
+            sequence_length=sequence_length,
+            train=train,
+            resolution=resolution,
+            **kwargs
+        )
+    
+    @property
+    def n_classes(self):
+        return self.dataset.n_classes
+    
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, idx):
+        return self.dataset[idx]
+
+
 class VideoData(pl.LightningDataModule):
 
     def __init__(self, args):
@@ -179,6 +213,18 @@ class VideoData(pl.LightningDataModule):
 
 
     def _dataset(self, train):
+        # Check if this is a Moving MNIST dataset request
+        if hasattr(self.args, 'dataset_type') and self.args.dataset_type == 'moving_mnist':
+            return MovingMNISTDataset(
+                data_file=None,  # Not used for Moving MNIST
+                sequence_length=self.args.sequence_length,
+                train=train,
+                resolution=self.args.resolution,
+                num_digits=getattr(self.args, 'num_digits', 2),
+                videos_per_digit=getattr(self.args, 'videos_per_digit', 1000)
+            )
+        
+        # Default behavior for other datasets
         Dataset = VideoDataset if osp.isdir(self.args.data_path) else HDF5Dataset
         dataset = Dataset(self.args.data_path, self.args.sequence_length,
                           train=train, resolution=self.args.resolution)
