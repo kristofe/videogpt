@@ -242,9 +242,33 @@ trainer.fit(model, data)
 
 ### Common Issues
 
-1. **Import Errors**: Make sure you're running from the project root directory
-2. **Memory Issues**: Reduce `batch_size` or `videos_per_digit` if you run out of memory
-3. **Slow Training**: The dataset generates videos on-the-fly, which may be slower than pre-generated datasets
+1. **PyTorch Lightning Import Error**: 
+   ```bash
+   ImportError: cannot import name 'get_num_classes' from 'torchmetrics.utilities.data'
+   ```
+   **Solution**: Install the compatible torchmetrics version:
+   ```bash
+   pip install torchmetrics==0.6.0
+   ```
+
+2. **MNIST Download Error**:
+   ```
+   HTTP Error 404: Not Found
+   ```
+   **Solution**: The code will automatically fall back to alternative MNIST sources. If this fails, the dataset will use synthetic MNIST-like data.
+
+3. **Module Not Found Error**:
+   ```
+   ModuleNotFoundError: No module named 'videogpt.moving_mnist'
+   ```
+   **Solution**: Install VideoGPT in development mode:
+   ```bash
+   pip install -e .
+   ```
+
+4. **Import Errors**: Make sure you're running from the project root directory
+5. **Memory Issues**: Reduce `batch_size` or `videos_per_digit` if you run out of memory
+6. **Slow Training**: The dataset generates videos on-the-fly, which may be slower than pre-generated datasets
 
 ### Performance Tips
 

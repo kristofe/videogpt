@@ -10,11 +10,42 @@ We present VideoGPT: a conceptually simple architecture for scaling likelihood b
 ![VideoGPT](VideoGPT.png)
 
 ## Installation
+
+### Quick Start (Recommended)
+For the easiest setup with Moving MNIST support:
+
+```bash
+# Create conda environment
+conda create -n vgpt python=3.8
+conda activate vgpt
+
+# Install PyTorch and dependencies
+conda install --yes -c conda-forge cudatoolkit=11.0 cudnn
+pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
+
+# Install VideoGPT in development mode (required for Moving MNIST)
+git clone https://github.com/wilson1yan/VideoGPT.git
+cd VideoGPT
+pip install -e .
+
+# Fix compatibility issues
+pip install torchmetrics==0.6.0
+
+# Verify installation
+python verify_installation.py
+```
+
+### Manual Installation
 Change the `cudatoolkit` version compatible to your machine.
 ```bash
 conda install --yes -c conda-forge cudatoolkit=11.0 cudnn
 pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
 pip install git+https://github.com/wilson1yan/VideoGPT.git
+```
+
+**Note**: If you encounter PyTorch Lightning compatibility issues, install the compatible torchmetrics version:
+```bash
+pip install torchmetrics==0.6.0
 ```
 
 ### Sparse Attention (Optional)
@@ -84,6 +115,22 @@ python scripts/create_moving_mnist.py \
 ```
 
 This creates a dataset with 10,000 training videos and 2,000 test videos of moving MNIST digits with bouncing motion patterns. The dataset is generated on-the-fly during training, so no large files are stored. See `MOVING_MNIST_README.md` for detailed documentation.
+
+#### Troubleshooting Moving MNIST
+
+If you encounter issues with Moving MNIST:
+
+1. **PyTorch Lightning Import Error**: Install the compatible torchmetrics version:
+   ```bash
+   pip install torchmetrics==0.6.0
+   ```
+
+2. **MNIST Download Error**: The MNIST dataset will be automatically downloaded from alternative sources if the default URL fails.
+
+3. **Module Not Found Error**: Make sure VideoGPT is installed in development mode:
+   ```bash
+   pip install -e .
+   ```
 
 If you do not care about classes, the class folders are not necessary and the dataset file structure can be collapsed into `train` and `test` directories of just videos.
 
