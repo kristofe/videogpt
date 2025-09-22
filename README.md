@@ -62,16 +62,6 @@ sh scripts/preprocess/ucf101/create_ucf_dataset.sh datasets/ucf101
 ``` 
 You may need to install `unrar` and `unzip` for the code to work correctly.
 
-### VideoMNIST Dataset
-
-For testing and experimentation, you can create a synthetic VideoMNIST dataset with moving handwritten digits:
-
-```bash
-sh scripts/preprocess/videomnist/create_videomnist_dataset.sh datasets/videomnist
-```
-
-This creates a dataset with 10,000 training videos and 2,000 test videos of moving MNIST digits with three motion patterns (bouncing, circular, linear). See `VIDEOMNIST_README.md` for detailed documentation.
-
 If you do not care about classes, the class folders are not necessary and the dataset file structure can be collapsed into `train` and `test` directories of just videos.
 
 ```python
