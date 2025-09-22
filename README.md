@@ -62,6 +62,29 @@ sh scripts/preprocess/ucf101/create_ucf_dataset.sh datasets/ucf101
 ``` 
 You may need to install `unrar` and `unzip` for the code to work correctly.
 
+### Moving MNIST Dataset
+
+For testing and experimentation, you can use the built-in Moving MNIST dataset with moving handwritten digits:
+
+```bash
+# Quick start - run the complete example
+python scripts/example_moving_mnist.py --create_dataset --visualize --train --generate
+```
+
+Or create the dataset manually:
+
+```bash
+# Create Moving MNIST dataset
+python scripts/create_moving_mnist.py \
+    --output_file datasets/moving_mnist/moving_mnist_64x64.h5 \
+    --sequence_length 16 \
+    --resolution 64 \
+    --num_digits 2 \
+    --videos_per_digit 1000
+```
+
+This creates a dataset with 10,000 training videos and 2,000 test videos of moving MNIST digits with bouncing motion patterns. The dataset is generated on-the-fly during training, so no large files are stored. See `MOVING_MNIST_README.md` for detailed documentation.
+
 If you do not care about classes, the class folders are not necessary and the dataset file structure can be collapsed into `train` and `test` directories of just videos.
 
 ```python
@@ -103,6 +126,20 @@ Use the `scripts/train_vqvae.py` script to train a VQ-VAE. Execute `python scrip
 * `--resolution 128`: spatial resolution to train on 
 * `--sequence_length 16`: temporal resolution, or video clip length
 
+### Moving MNIST Training Example
+```bash
+# Train VideoGPT on Moving MNIST
+python scripts/train_videogpt.py \
+    --data_path moving_mnist \
+    --dataset_type moving_mnist \
+    --resolution 64 \
+    --sequence_length 16 \
+    --batch_size 8 \
+    --num_digits 2 \
+    --videos_per_digit 1000 \
+    --max_steps 10000
+```
+
 ## Training VideoGPT
 Use the `scripts/train_videogpt.py` script to train an VideoGPT model for sampling. Execute `python scripts/train_videogpt.py -h` for information on all available training settings. A subset of more relevant settings are listed below, along with default values.
 ### VideoGPT Specific Settings
@@ -130,6 +167,15 @@ Use the `scripts/train_videogpt.py` script to train an VideoGPT model for sampli
 
 ## Sampling VideoGPT
 VideoGPT models can be sampled using the `scripts/sample_videogpt.py`. You can specify a path to a checkpoint during training. You may need to install `ffmpeg`: `sudo apt-get install ffmpeg`
+
+### Moving MNIST Sampling Example
+```bash
+# Generate samples from a trained Moving MNIST model
+python scripts/sample_videogpt.py --ckpt path/to/checkpoint.ckpt --n 8
+
+# Or use the example script for complete workflow
+python scripts/example_moving_mnist.py --generate --checkpoint path/to/checkpoint.ckpt
+```
 
 ## Evaluation
 Evaluation is done primarily using [Frechet Video Distance (FVD)](https://arxiv.org/abs/1812.01717) for BAIR and Kinetics, and [Inception Score](https://arxiv.org/abs/1606.03498) for UCF-101. Inception Score can be computed by generating samples and using the code from the [TGANv2 repo](https://github.com/pfnet-research/tgan2). FVD can be computed through `python scripts/compute_fvd.py`, which runs a PyTorch-ported version of the [original codebase](https://github.com/google-research/google-research/tree/master/frechet_video_distance)
