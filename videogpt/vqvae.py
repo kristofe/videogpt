@@ -57,20 +57,163 @@ class VQVAE(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x = batch['video']
-        recon_loss, _, vq_output = self.forward(x)
+        recon_loss, x_recon, vq_output = self.forward(x)
         commitment_loss = vq_output['commitment_loss']
         loss = recon_loss + commitment_loss
+        
+        # Log training losses
+        self.log('train/recon_loss', recon_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/commitment_loss', commitment_loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/total_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/perplexity', vq_output['perplexity'], on_step=True, on_epoch=True, prog_bar=True)
+        
+        # Log images every 100 steps
+        if batch_idx % 100 == 0:
+            self._save_images(x, x_recon, 'train')
+        
         return loss
 
     def validation_step(self, batch, batch_idx):
         x = batch['video']
-        recon_loss, _, vq_output = self.forward(x)
+        recon_loss, x_recon, vq_output = self.forward(x)
         self.log('val/recon_loss', recon_loss, prog_bar=True)
         self.log('val/perplexity', vq_output['perplexity'], prog_bar=True)
         self.log('val/commitment_loss', vq_output['commitment_loss'], prog_bar=True)
+        
+        # Log images every validation step
+        self._save_images(x, x_recon, 'val')
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=3e-4, betas=(0.9, 0.999))
+
+    def _save_images(self, original, reconstructed, prefix):
+        """Save original and reconstructed video frames to disk."""
+        try:
+            import os
+            import matplotlib.pyplot as plt
+            
+            # Create output directory
+            output_dir = f"training_images/{prefix}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Take the first sample from the batch
+            orig = original[0]  # [C, T, H, W]
+            recon = reconstructed[0]  # [C, T, H, W]
+            
+            # Convert from [-0.5, 0.5] to [0, 1] range
+            orig = torch.clamp(orig + 0.5, 0, 1)
+            recon = torch.clamp(recon + 0.5, 0, 1)
+            
+            # Select a few frames from the sequence
+            T = orig.shape[1]
+            frame_indices = torch.linspace(0, T-1, min(4, T), dtype=torch.long)
+            
+            # Create comparison figure
+            fig, axes = plt.subplots(2, len(frame_indices), figsize=(4 * len(frame_indices), 8))
+            if len(frame_indices) == 1:
+                axes = axes.reshape(2, 1)
+            
+            for i, frame_idx in enumerate(frame_indices):
+                orig_frame = orig[:, frame_idx]  # [C, H, W]
+                recon_frame = recon[:, frame_idx]  # [C, H, W]
+                
+                # Convert to numpy
+                orig_np = orig_frame.detach().cpu().numpy()
+                recon_np = recon_frame.detach().cpu().numpy()
+                
+                # Plot original frame
+                if orig_np.shape[0] == 3:  # RGB
+                    axes[0, i].imshow(orig_np.transpose(1, 2, 0))
+                else:  # Grayscale
+                    axes[0, i].imshow(orig_np[0], cmap='gray')
+                axes[0, i].set_title(f'Original Frame {frame_idx}')
+                axes[0, i].axis('off')
+                
+                # Plot reconstructed frame
+                if recon_np.shape[0] == 3:  # RGB
+                    axes[1, i].imshow(recon_np.transpose(1, 2, 0))
+                else:  # Grayscale
+                    axes[1, i].imshow(recon_np[0], cmap='gray')
+                axes[1, i].set_title(f'Reconstructed Frame {frame_idx}')
+                axes[1, i].axis('off')
+            
+            plt.tight_layout()
+            
+            # Save the figure
+            filename = f"{output_dir}/step_{self.global_step:06d}.png"
+            plt.savefig(filename, dpi=100, bbox_inches='tight')
+            plt.close(fig)  # Close to free memory
+            
+            # Log the file path to TensorBoard as text
+            self.logger.experiment.add_text(f'{prefix}/image_path', filename, self.global_step)
+            
+        except Exception as e:
+            # If image saving fails, just skip it to avoid breaking training
+            if self.global_step % 100 == 0:
+                print(f"Warning: Failed to save images: {e}")
+            pass
+
+    def _log_images(self, original, reconstructed, prefix):
+        """Log original and reconstructed video frames to TensorBoard."""
+        try:
+            # Take the first sample from the batch
+            orig = original[0]  # [C, T, H, W]
+            recon = reconstructed[0]  # [C, T, H, W]
+            
+            # Convert from [-0.5, 0.5] to [0, 1] range
+            orig = torch.clamp(orig + 0.5, 0, 1)
+            recon = torch.clamp(recon + 0.5, 0, 1)
+            
+            # Select a few frames from the sequence (e.g., every 4th frame)
+            T = orig.shape[1]
+            frame_indices = torch.linspace(0, T-1, min(4, T), dtype=torch.long)
+            
+            # Log individual frames using add_figure to avoid PIL issues
+            for i, frame_idx in enumerate(frame_indices):
+                orig_frame = orig[:, frame_idx]  # [C, H, W]
+                recon_frame = recon[:, frame_idx]  # [C, H, W]
+                
+                # Convert to numpy and ensure proper range
+                orig_np = orig_frame.detach().cpu().numpy()
+                recon_np = recon_frame.detach().cpu().numpy()
+                
+                # Ensure values are in [0, 1] range
+                orig_np = np.clip(orig_np, 0, 1)
+                recon_np = np.clip(recon_np, 0, 1)
+                
+                # Log using add_figure with matplotlib to avoid PIL issues
+                import matplotlib.pyplot as plt
+                
+                fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+                
+                # Plot original frame
+                if orig_np.shape[0] == 3:  # RGB
+                    axes[0].imshow(orig_np.transpose(1, 2, 0))
+                else:  # Grayscale
+                    axes[0].imshow(orig_np[0], cmap='gray')
+                axes[0].set_title(f'Original Frame {i}')
+                axes[0].axis('off')
+                
+                # Plot reconstructed frame
+                if recon_np.shape[0] == 3:  # RGB
+                    axes[1].imshow(recon_np.transpose(1, 2, 0))
+                else:  # Grayscale
+                    axes[1].imshow(recon_np[0], cmap='gray')
+                axes[1].set_title(f'Reconstructed Frame {i}')
+                axes[1].axis('off')
+                
+                plt.tight_layout()
+                
+                # Log the figure
+                self.logger.experiment.add_figure(f'{prefix}/frame_comparison_{i}', fig, self.global_step)
+                plt.close(fig)  # Close to free memory
+                
+        except Exception as e:
+            # If image logging fails, just skip it to avoid breaking training
+            # Only print warning occasionally to avoid spam
+            if self.global_step % 100 == 0:
+                print(f"Warning: Failed to log images: {e}")
+            pass
 
     @staticmethod
     def add_model_specific_args(parent_parser):

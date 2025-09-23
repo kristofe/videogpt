@@ -1,6 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from videogpt import VQVAE, VideoData
 
 
@@ -26,11 +27,14 @@ def main():
     callbacks = []
     callbacks.append(ModelCheckpoint(monitor='val/recon_loss', mode='min'))
 
+    # Add TensorBoard logger
+    logger = TensorBoardLogger("lightning_logs", name="vqvae", version=None)
+
     kwargs = dict()
     if args.gpus > 1:
         kwargs = dict(distributed_backend='ddp', gpus=args.gpus)
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
-                                            max_steps=200000, **kwargs)
+                                            logger=logger, max_steps=200000, **kwargs)
 
     trainer.fit(model, data)
 
