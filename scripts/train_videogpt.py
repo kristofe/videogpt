@@ -1,6 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from videogpt import VideoGPT, VideoData
 
 
@@ -47,13 +48,16 @@ def main():
     callbacks = []
     callbacks.append(ModelCheckpoint(monitor='val/loss', mode='min', save_top_k=-1))
 
+    # Add TensorBoard logger
+    logger = TensorBoardLogger("lightning_logs", name="videogpt", version=None)
+
     kwargs = dict()
     if args.gpus > 1:
         # find_unused_parameters = False to support gradient checkpointing
         kwargs = dict(distributed_backend='ddp', gpus=args.gpus,
                       plugins=[pl.plugins.DDPPlugin(find_unused_parameters=False)])
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
-                                            max_steps=args.max_steps, **kwargs)
+                                            logger=logger, max_steps=args.max_steps, **kwargs)
 
     trainer.fit(model, data)
 

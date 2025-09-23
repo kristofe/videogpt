@@ -152,11 +152,92 @@ class VideoGPT(pl.LightningModule):
             x = shift_dim(x, 1, -1)
 
         loss, _ = self(x, targets, cond)
+        
+        # Log training loss
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        
+        # Generate and save video predictions every 100 steps
+        if batch_idx % 100 == 0:
+            self._save_video_predictions(batch, 'train')
+        
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.training_step(batch, batch_idx)
         self.log('val/loss', loss, prog_bar=True)
+        
+        # Log learning rate
+        current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+        self.log('val/learning_rate', current_lr, prog_bar=True)
+        
+        # Generate and save video predictions for validation
+        self._save_video_predictions(batch, 'val')
+
+    def _save_video_predictions(self, batch, prefix):
+        """Generate and save video predictions as animated GIFs."""
+        try:
+            import os
+            import imageio
+            import numpy as np
+            
+            # Create output directory
+            output_dir = f"video_predictions/{prefix}"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Take the first sample from the batch
+            x = batch['video'][:1]  # [1, C, T, H, W]
+            
+            # Create a batch for sampling (only first sample)
+            sample_batch = {'video': x}
+            if self.args.class_cond and 'label' in batch:
+                sample_batch['label'] = batch['label'][:1]
+            
+            # Generate prediction
+            with torch.no_grad():
+                # Generate video prediction
+                predicted_video = self.sample(1, sample_batch)
+                
+                # Convert to numpy and ensure proper range
+                original_video = x[0].cpu().numpy()  # [C, T, H, W]
+                predicted_video = predicted_video[0].cpu().numpy()  # [C, T, H, W]
+                
+                # Convert from [0, 1] to [0, 255] range
+                original_video = np.clip(original_video * 255, 0, 255).astype(np.uint8)
+                predicted_video = np.clip(predicted_video * 255, 0, 255).astype(np.uint8)
+                
+                # Convert from [C, T, H, W] to [T, H, W, C] for imageio
+                if original_video.shape[0] == 3:  # RGB
+                    original_video = original_video.transpose(1, 2, 3, 0)  # [T, H, W, C]
+                    predicted_video = predicted_video.transpose(1, 2, 3, 0)  # [T, H, W, C]
+                else:  # Grayscale
+                    original_video = original_video[0].transpose(1, 2, 0)  # [T, H, W, 1]
+                    predicted_video = predicted_video[0].transpose(1, 2, 0)  # [T, H, W, 1]
+                    # Convert grayscale to RGB for GIF
+                    original_video = np.repeat(original_video, 3, axis=-1)
+                    predicted_video = np.repeat(predicted_video, 3, axis=-1)
+                
+                # Create side-by-side comparison
+                side_by_side = np.concatenate([original_video, predicted_video], axis=2)  # [T, H, 2*W, C]
+                
+                # Save as animated GIF
+                filename = f"{output_dir}/step_{self.global_step:06d}.gif"
+                imageio.mimsave(filename, side_by_side, duration=0.2, loop=0)
+                
+                # Also save original and predicted separately
+                original_filename = f"{output_dir}/original_step_{self.global_step:06d}.gif"
+                predicted_filename = f"{output_dir}/predicted_step_{self.global_step:06d}.gif"
+                
+                imageio.mimsave(original_filename, original_video, duration=0.2, loop=0)
+                imageio.mimsave(predicted_filename, predicted_video, duration=0.2, loop=0)
+                
+                # Log file paths to TensorBoard
+                self.logger.experiment.add_text(f'{prefix}/video_prediction_path', filename, self.global_step)
+                
+        except Exception as e:
+            # If video prediction fails, just skip it to avoid breaking training
+            if self.global_step % 100 == 0:
+                print(f"Warning: Failed to save video predictions: {e}")
+            pass
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=3e-4, betas=(0.9, 0.999))

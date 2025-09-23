@@ -156,7 +156,7 @@ video_recon = vqvae.decode(encodings)
 Use the `scripts/train_vqvae.py` script to train a VQ-VAE. Execute `python scripts/train_vqvae.py -h` for information on all available training settings. A subset of more relevant settings are listed below, along with default values.
 
 quick example: `python scripts/train_vqvae.py --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --resolution 64 --gpus 1`
- 
+
 ### VQ-VAE Specific Settings
 * `--embedding_dim`: number of dimensions for codebooks embeddings
 * `--n_codes 2048`: number of codes in the codebook
@@ -192,6 +192,8 @@ python scripts/train_videogpt.py \
 
 ## Training VideoGPT
 Use the `scripts/train_videogpt.py` script to train an VideoGPT model for sampling. Execute `python scripts/train_videogpt.py -h` for information on all available training settings. A subset of more relevant settings are listed below, along with default values.
+
+quick example: `python scripts/train_videogpt.py --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch\=61-step\=1983.ckpt --gpus 1 --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --resolution 64 --max_steps 2000`
 ### VideoGPT Specific Settings
 * `--vqvae kinetics_stride4x4x4`: path to a vqvae checkpoint file
 * `--n_cond_frames 0`: number of frames to condition on. `0` represents a non-frame conditioned model

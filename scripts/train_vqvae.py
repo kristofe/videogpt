@@ -34,7 +34,8 @@ def main():
     if args.gpus > 1:
         kwargs = dict(distributed_backend='ddp', gpus=args.gpus)
     trainer = pl.Trainer.from_argparse_args(args, callbacks=callbacks,
-                                            logger=logger, max_steps=200000, **kwargs)
+#                                            logger=logger, max_steps=200000, **kwargs)
+                                            logger=logger, max_steps=2000, **kwargs) # Good for moving mnist
 
     trainer.fit(model, data)
 
