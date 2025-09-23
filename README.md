@@ -195,7 +195,12 @@ Use the `scripts/train_videogpt.py` script to train an VideoGPT model for sampli
 
 quick example: `python scripts/train_videogpt.py --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch\=61-step\=1983.ckpt --gpus 1 --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --resolution 64 --max_steps 2000`
 
-comprehensive example with video saving: `python scripts/train_videogpt.py --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --dataset_type moving_mnist --resolution 64 --sequence_length 16 --batch_size 8 --max_steps 100000 --gpus 1 --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch=61-step=1983.ckpt --save_video_every 1000 --save_val_video_every 1`
+comprehensive example with video saving: `python scripts/train_videogpt.py --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --dataset_type moving_mnist --resolution 64 --sequence_length 16 --batch_size 8 --max_steps 100000 --gpus 1 --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch=61-step=1983.ckpt --save_video_every 1000 --save_val_video_every 1000`
+
+resume training example: `python scripts/train_videogpt.py     --resume_from_checkpoint "lightning_logs/videogpt/version_2/checkpoints/epoch=79-step=99999.ckpt"     --data_path datasets/moving_mnist/moving_mnist_64x64.h5     --dataset_type moving_mnist     --resolution 64     --sequence_length 16     --batch_size 8     --num_workers 8     --num_digits 2     --videos_per_digit 1000     --vqvae "lightning_logs/vqvae/version_2/checkpoints/epoch=61-step=1983.ckpt"     --max_steps 200000     --gpus 1     --save_video_every 1000     --save_val_video_every 1000`
+
+Frame conditioning isn't resume/checkpoint compatible with 0 frames condtioning.
+train with conditional frames: `python scripts/train_videogpt.py   --data_path datasets/moving_mnist/moving_mnist_64x64.h5     --dataset_type moving_mnist     --resolution 64     --sequence_length 16     --batch_size 8     --num_workers 8     --num_digits 2     --videos_per_digit 1000     --vqvae "lightning_logs/vqvae/version_2/checkpoints/epoch=61-step=1983.ckpt"     --max_steps 200000     --gpus 1     --save_video_every 1000     --save_val_video_every 1000 --n_cond_frames 1`
 ### VideoGPT Specific Settings
 * `--vqvae kinetics_stride4x4x4`: path to a vqvae checkpoint file
 * `--n_cond_frames 0`: number of frames to condition on. `0` represents a non-frame conditioned model
