@@ -170,8 +170,10 @@ class VideoGPT(pl.LightningModule):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('val/learning_rate', current_lr, prog_bar=True)
         
-        # Generate and save video predictions for validation
-        self._save_video_predictions(batch, 'val')
+        # Generate and save video predictions for validation only occasionally
+        # Use save_val_video_every parameter to control frequency (default: only first batch)
+        #if batch_idx % self.args.save_val_video_every == 0:
+        #    self._save_video_predictions(batch, 'val')
 
     def _save_video_predictions(self, batch, prefix):
         """Generate and save video predictions as animated GIFs."""
@@ -279,5 +281,7 @@ class VideoGPT(pl.LightningModule):
         parser.add_argument('--attn_dropout', type=float, default=0.3)
         parser.add_argument('--save_video_every', type=int, default=1000,
                             help='Save video predictions every N training steps')
+        parser.add_argument('--save_val_video_every', type=int, default=1,
+                            help='Save video predictions every N validation batches (default: 1, only first batch)')
 
         return parser
