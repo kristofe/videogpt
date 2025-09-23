@@ -157,7 +157,7 @@ class VideoGPT(pl.LightningModule):
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         
         # Generate and save video predictions every 100 steps
-        if batch_idx % 100 == 0:
+        if batch_idx % self.args.save_video_every == 0:
             self._save_video_predictions(batch, 'train')
         
         return loss
@@ -230,6 +230,21 @@ class VideoGPT(pl.LightningModule):
                 imageio.mimsave(original_filename, original_video, duration=0.2, loop=0)
                 imageio.mimsave(predicted_filename, predicted_video, duration=0.2, loop=0)
                 
+                # Add videos directly to TensorBoard
+                try:
+                    # Convert back to tensor format for TensorBoard: [N, T, C, H, W]
+                    original_tensor = torch.from_numpy(original_video).permute(0, 3, 1, 2).unsqueeze(0)  # [1, T, C, H, W]
+                    predicted_tensor = torch.from_numpy(predicted_video).permute(0, 3, 1, 2).unsqueeze(0)  # [1, T, C, H, W]
+                    side_by_side_tensor = torch.from_numpy(side_by_side).permute(0, 3, 1, 2).unsqueeze(0)  # [1, T, C, H, W]
+                    
+                    # Add videos to TensorBoard
+                    self.logger.experiment.add_video(f'{prefix}/original_video', original_tensor, self.global_step, fps=5)
+                    self.logger.experiment.add_video(f'{prefix}/predicted_video', predicted_tensor, self.global_step, fps=5)
+                    self.logger.experiment.add_video(f'{prefix}/side_by_side', side_by_side_tensor, self.global_step, fps=5)
+                    
+                except Exception as e:
+                    print(f"Warning: Failed to add videos to TensorBoard: {e}")
+                
                 # Log file paths to TensorBoard
                 self.logger.experiment.add_text(f'{prefix}/video_prediction_path', filename, self.global_step)
                 
@@ -262,5 +277,7 @@ class VideoGPT(pl.LightningModule):
         parser.add_argument('--attn_type', type=str, default='full',
                             choices=['full', 'sparse'])
         parser.add_argument('--attn_dropout', type=float, default=0.3)
+        parser.add_argument('--save_video_every', type=int, default=1000,
+                            help='Save video predictions every N training steps')
 
         return parser

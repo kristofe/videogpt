@@ -194,6 +194,8 @@ python scripts/train_videogpt.py \
 Use the `scripts/train_videogpt.py` script to train an VideoGPT model for sampling. Execute `python scripts/train_videogpt.py -h` for information on all available training settings. A subset of more relevant settings are listed below, along with default values.
 
 quick example: `python scripts/train_videogpt.py --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch\=61-step\=1983.ckpt --gpus 1 --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --resolution 64 --max_steps 2000`
+
+comprehensive example with video saving: `python scripts/train_videogpt.py --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --dataset_type moving_mnist --resolution 64 --sequence_length 16 --batch_size 8 --max_steps 100000 --gpus 1 --vqvae lightning_logs/vqvae/version_2/checkpoints/epoch=61-step=1983.ckpt --save_video_every 1000`
 ### VideoGPT Specific Settings
 * `--vqvae kinetics_stride4x4x4`: path to a vqvae checkpoint file
 * `--n_cond_frames 0`: number of frames to condition on. `0` represents a non-frame conditioned model
@@ -204,6 +206,7 @@ quick example: `python scripts/train_videogpt.py --vqvae lightning_logs/vqvae/ve
 * `--dropout 0.2'`: dropout probability applied to features after attention and positionwise feedforward layers
 * `--attn_type full`: `full` or `sparse` attention. Refer to the Installation section for install sparse attention
 * `--attn_dropout 0.3`: dropout probability applied to the attention weight matrix
+* `--save_video_every 1000`: save video predictions every N training steps (default: 1000)
 ### Training Settings
 * `--gpus 4`: number of gpus for distributed training
 * `--gradient_clip_val 1`: gradient clipping threshold for training
