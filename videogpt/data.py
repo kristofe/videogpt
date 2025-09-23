@@ -160,9 +160,31 @@ class HDF5Dataset(data.Dataset):
         end = self._idx[idx + 1] if idx < len(self._idx) - 1 else len(self._images)
         assert end - start >= 0
 
-        start = start + np.random.randint(low=0, high=end - start - self.sequence_length)
-        assert start < start + self.sequence_length <= end
-        video = torch.tensor(self._images[start:start + self.sequence_length])
+        # Check if we have enough frames for the sequence length
+        available_frames = end - start
+        if available_frames < self.sequence_length:
+            # If not enough frames, pad with the last frame or repeat frames
+            if available_frames == 0:
+                # Edge case: no frames available, create a zero tensor
+                video = torch.zeros(self.sequence_length, *self._images.shape[1:])
+            else:
+                # Repeat the available frames to reach sequence_length
+                video_frames = self._images[start:end]
+                repeat_times = (self.sequence_length + available_frames - 1) // available_frames
+                video_frames = np.tile(video_frames, (repeat_times, 1, 1, 1))
+                video = torch.tensor(video_frames[:self.sequence_length])
+        else:
+            # Normal case: randomly sample a subsequence
+            max_start = end - start - self.sequence_length
+            if max_start > 0:
+                start_offset = np.random.randint(low=0, high=max_start)
+                start = start + start_offset
+            else:
+                # Edge case: exactly sequence_length frames available
+                start = start
+            assert start < start + self.sequence_length <= end
+            video = torch.tensor(self._images[start:start + self.sequence_length])
+        
         return dict(video=preprocess(video, self.resolution))
 
 

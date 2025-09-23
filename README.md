@@ -99,7 +99,7 @@ For testing and experimentation, you can use the built-in Moving MNIST dataset w
 
 ```bash
 # Quick start - run the complete example
-python scripts/example_moving_mnist.py --create_dataset --visualize --train --generate
+python scripts/example_moving_mnist.py --create_dataset --visualize 
 ```
 
 Or create the dataset manually:
@@ -154,6 +154,9 @@ video_recon = vqvae.decode(encodings)
 
 ## Training VQ-VAE
 Use the `scripts/train_vqvae.py` script to train a VQ-VAE. Execute `python scripts/train_vqvae.py -h` for information on all available training settings. A subset of more relevant settings are listed below, along with default values.
+
+quick example: `python scripts/train_vqvae.py --data_path datasets/moving_mnist/moving_mnist_64x64.h5 --resolution 64 --gpus 1`
+ 
 ### VQ-VAE Specific Settings
 * `--embedding_dim`: number of dimensions for codebooks embeddings
 * `--n_codes 2048`: number of codes in the codebook
