@@ -87,16 +87,12 @@ class VQVAE(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=3e-4, betas=(0.9, 0.999))
 
     def _log_images_tensorboard(self, original, reconstructed, prefix):
-        """Log images directly to TensorBoard using add_figure."""
+        """Log images directly to TensorBoard using add_image and add_images."""
         try:
             # Workaround for PIL Image.ANTIALIAS issue
             import PIL.Image
             if not hasattr(PIL.Image, 'ANTIALIAS'):
                 PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
-            
-            import matplotlib.pyplot as plt
-            import matplotlib
-            matplotlib.use('Agg')  # Use non-interactive backend
             
             # Take the first sample from the batch
             orig = original[0]  # [C, T, H, W]
@@ -110,40 +106,41 @@ class VQVAE(pl.LightningModule):
             T = orig.shape[1]
             frame_indices = torch.linspace(0, T-1, min(4, T), dtype=torch.long)
             
-            # Create comparison figure
-            fig, axes = plt.subplots(2, len(frame_indices), figsize=(4 * len(frame_indices), 8))
-            if len(frame_indices) == 1:
-                axes = axes.reshape(2, 1)
+            # Create batches of frames for add_images
+            orig_frames = orig[:, frame_indices]  # [C, 4, H, W]
+            recon_frames = recon[:, frame_indices]  # [C, 4, H, W]
             
-            for i, frame_idx in enumerate(frame_indices):
-                orig_frame = orig[:, frame_idx]  # [C, H, W]
-                recon_frame = recon[:, frame_idx]  # [C, H, W]
-                
-                # Convert to numpy
-                orig_np = orig_frame.detach().cpu().numpy()
-                recon_np = recon_frame.detach().cpu().numpy()
-                
-                # Plot original frame
-                if orig_np.shape[0] == 3:  # RGB
-                    axes[0, i].imshow(orig_np.transpose(1, 2, 0))
-                else:  # Grayscale
-                    axes[0, i].imshow(orig_np[0], cmap='gray')
-                axes[0, i].set_title(f'Original Frame {frame_idx}')
-                axes[0, i].axis('off')
-                
-                # Plot reconstructed frame
-                if recon_np.shape[0] == 3:  # RGB
-                    axes[1, i].imshow(recon_np.transpose(1, 2, 0))
-                else:  # Grayscale
-                    axes[1, i].imshow(recon_np[0], cmap='gray')
-                axes[1, i].set_title(f'Reconstructed Frame {frame_idx}')
-                axes[1, i].axis('off')
+            # Reshape to [N, C, H, W] format for add_images
+            orig_batch = orig_frames.permute(1, 0, 2, 3)  # [4, C, H, W]
+            recon_batch = recon_frames.permute(1, 0, 2, 3)  # [4, C, H, W]
             
-            plt.tight_layout()
-            
-            # Log the figure directly to TensorBoard
-            self.logger.experiment.add_figure(f'{prefix}/video_comparison', fig, self.global_step)
-            plt.close(fig)  # Close to free memory
+            # Try add_images for batch of frames
+            try:
+                self.logger.experiment.add_images(f'{prefix}/original_frames', 
+                                                orig_batch, 
+                                                self.global_step, 
+                                                dataformats='NCHW')
+                self.logger.experiment.add_images(f'{prefix}/reconstructed_frames', 
+                                                recon_batch, 
+                                                self.global_step, 
+                                                dataformats='NCHW')
+            except Exception as e:
+                print(f"✗ add_images failed: {e}, trying add_image...")
+                
+                # Fallback to individual add_image calls
+                for i, frame_idx in enumerate(frame_indices):
+                    orig_frame = orig[:, frame_idx]  # [C, H, W]
+                    recon_frame = recon[:, frame_idx]  # [C, H, W]
+                    
+                    # Log individual frames
+                    self.logger.experiment.add_image(f'{prefix}/original_frame_{i}', 
+                                                   orig_frame, 
+                                                   self.global_step, 
+                                                   dataformats='CHW')
+                    self.logger.experiment.add_image(f'{prefix}/reconstructed_frame_{i}', 
+                                                   recon_frame, 
+                                                   self.global_step, 
+                                                   dataformats='CHW')
             
         except Exception as e:
             # If image logging fails, just skip it to avoid breaking training
