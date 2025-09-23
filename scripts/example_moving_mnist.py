@@ -65,7 +65,8 @@ def visualize_dataset(dataset_path, num_samples=4):
         
         # Convert to [T, H, W] format for visualization
         if video.dim() == 4:  # [C, T, H, W]
-            video = video.squeeze(0)  # [T, H, W]
+            video = video.permute(1, 0, 2, 3)  # [T, C, H, W]
+            video = video.mean(dim=1)  # [T, H, W] - average across channels
         elif video.dim() == 3:  # [T, H, W] or [T, C, H, W] -> [T, H, W]
             if video.shape[1] == 1:  # [T, 1, H, W]
                 video = video.squeeze(1)  # [T, H, W]
@@ -101,7 +102,8 @@ def visualize_dataset(dataset_path, num_samples=4):
         
         # Convert to [T, H, W] format for visualization
         if video.dim() == 4:  # [C, T, H, W]
-            video = video.squeeze(0)  # [T, H, W]
+            video = video.permute(1, 0, 2, 3)  # [T, C, H, W]
+            video = video.mean(dim=1)  # [T, H, W] - average across channels
         elif video.dim() == 3:  # [T, H, W] or [T, C, H, W] -> [T, H, W]
             if video.shape[1] == 1:  # [T, 1, H, W]
                 video = video.squeeze(1)  # [T, H, W]
@@ -125,11 +127,101 @@ def visualize_dataset(dataset_path, num_samples=4):
     print(f"Animated GIFs saved as moving_mnist_sample_0.gif through moving_mnist_sample_{num_samples-1}.gif")
 
 
+def train_vqvae_example(dataset_path, max_steps=50):
+    """Train VQ-VAE on Moving MNIST first."""
+    print(f"Training VQ-VAE on Moving MNIST (max_steps={max_steps})...")
+    
+    # Create args for VQ-VAE training
+    class VQVAEArgs:
+        def __init__(self):
+            self.data_path = dataset_path
+            self.dataset_type = 'moving_mnist'
+            self.resolution = 64
+            self.sequence_length = 16
+            self.batch_size = 8
+            self.num_workers = 2
+            self.num_digits = 2
+            self.videos_per_digit = 100
+            
+            # VQ-VAE model args
+            self.embedding_dim = 256
+            self.n_codes = 512
+            self.n_hiddens = 128
+            self.n_res_layers = 2
+            self.downsample = [4, 4, 4]
+            
+            # Training args
+            self.learning_rate = 1e-4
+            self.weight_decay = 0.01
+            self.max_steps = max_steps
+            self.val_check_interval = 25
+            self.log_every_n_steps = 5
+            
+            # Other args
+            self.gpus = 1 if torch.cuda.is_available() else 0
+            self.precision = 16 if torch.cuda.is_available() else 32
+    
+    args = VQVAEArgs()
+    
+    # Create data module
+    data = VideoData(args)
+    
+    # Create VQ-VAE model
+    from videogpt import VQVAE
+    model = VQVAE(args)
+    
+    # Create trainer
+    import pytorch_lightning as pl
+    from pytorch_lightning.callbacks import ModelCheckpoint
+    
+    callbacks = [
+        ModelCheckpoint(
+            monitor='val/recon_loss',
+            mode='min',
+            save_top_k=1,
+            filename='moving_mnist_vqvae-{epoch:02d}-{val_recon_loss:.2f}'
+        )
+    ]
+    
+    trainer = pl.Trainer(
+        max_steps=args.max_steps,
+        gpus=args.gpus,
+        precision=args.precision,
+        callbacks=callbacks,
+        val_check_interval=args.val_check_interval,
+        log_every_n_steps=args.log_every_n_steps,
+    )
+    
+    # Train VQ-VAE
+    trainer.fit(model, data)
+    
+    # Find the actual checkpoint path
+    checkpoint_files = []
+    for root, dirs, files in os.walk('lightning_logs'):
+        for file in files:
+            if file.startswith('moving_mnist_vqvae-') and file.endswith('.ckpt'):
+                checkpoint_files.append(os.path.join(root, file))
+    
+    if checkpoint_files:
+        # Sort by modification time to get the most recent
+        checkpoint_files.sort(key=os.path.getmtime, reverse=True)
+        return checkpoint_files[0]
+    else:
+        return 'lightning_logs/version_0/checkpoints/moving_mnist_vqvae-epoch=00-val_recon_loss=0.00.ckpt'
+
 def train_example(dataset_path, max_steps=100):
     """Train VideoGPT on Moving MNIST (short training for demo)."""
     print(f"Training VideoGPT on Moving MNIST (max_steps={max_steps})...")
     
-    # Create a simple args object
+    # First train VQ-VAE
+    vqvae_ckpt = train_vqvae_example(dataset_path, max_steps=50)
+    
+    # Verify the checkpoint exists
+    if not os.path.exists(vqvae_ckpt):
+        print(f"Error: VQ-VAE checkpoint not found at {vqvae_ckpt}")
+        return None
+    
+    # Create a simple args object for VideoGPT
     class Args:
         def __init__(self):
             self.data_path = dataset_path
@@ -144,12 +236,18 @@ def train_example(dataset_path, max_steps=100):
             self.class_cond_dim = None
             
             # VideoGPT model args
-            self.embed_dim = 256
+            self.embed_dim = 252  # Divisible by 3
+            self.hidden_dim = 252  # Divisible by 3
             self.n_heads = 8
+            self.heads = 8
             self.n_layers = 12
+            self.layers = 12
             self.attn_dropout = 0.1
             self.resid_dropout = 0.1
             self.embd_pdrop = 0.1
+            self.dropout = 0.1
+            self.n_cond_frames = 0
+            self.attn_type = 'full'
             
             # Training args
             self.learning_rate = 1e-4
@@ -158,9 +256,10 @@ def train_example(dataset_path, max_steps=100):
             self.val_check_interval = 50
             self.log_every_n_steps = 10
             
-            # VQ-VAE args (simplified)
+            # VQ-VAE args - use the trained checkpoint
+            self.vqvae = vqvae_ckpt
             self.vqvae_model = 'bair_stride4x2x2'
-            self.vqvae_ckpt = None
+            self.vqvae_ckpt = vqvae_ckpt
             
             # Other args
             self.gpus = 1 if torch.cuda.is_available() else 0
@@ -194,7 +293,6 @@ def train_example(dataset_path, max_steps=100):
         callbacks=callbacks,
         val_check_interval=args.val_check_interval,
         log_every_n_steps=args.log_every_n_steps,
-        enable_progress_bar=True
     )
     
     # Train

@@ -223,6 +223,10 @@ class MovingMNISTDataset(data.Dataset):
         
         # Note: _scale_video already returns [C, T, H, W] format, so no additional permute needed
         
+        # Convert from 1-channel to 3-channel by replicating the grayscale channel
+        if video_tensor.shape[0] == 1:  # [1, T, H, W]
+            video_tensor = video_tensor.repeat(3, 1, 1, 1)  # [3, T, H, W]
+        
         # Normalize to [-0.5, 0.5] range as expected by VideoGPT
         video_tensor = video_tensor - 0.5
         
